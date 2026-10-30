@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cinema UI for Pahe
 // @namespace    https://github.com/insanebeggar/pahe-cinema-ui
-// @version      1.0.0
+// @version      1.0.2
 // @description  Editorial film-catalogue redesign with optional TMDb posters, cast and live search.
 // @author       insane.beggar
 // @license      MIT
