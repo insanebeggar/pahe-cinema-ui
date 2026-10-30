@@ -25,11 +25,11 @@ It changes how pages look and behave in your own browser. It does not touch the 
 
 | | |
 |---|---|
-| ![Home page poster grid in the dark MUBI mood](docs/screenshots/home-grid-dark.webp) | ![Ledger layout with descriptions in the Criterion paper mood](docs/screenshots/ledger-light.webp) |
+| ![Poster grid in the dark MUBI mood](docs/screenshots/home-posters.webp) | ![Ledger layout with descriptions in the Criterion paper mood](docs/screenshots/home-ledger.webp) |
 | Poster grid, MUBI mood | Ledger with descriptions, Criterion mood |
-| ![Film page with rating, credits and cast](docs/screenshots/film-page.webp) | ![Live search with suggestions](docs/screenshots/live-search.webp) |
+| ![Film page with rating, credits and cast](docs/screenshots/details.webp) | ![Live search with suggestions](docs/screenshots/search.webp) |
 | Film page with TMDb cast | Live search |
-| ![Settings panel](docs/screenshots/settings.webp) | |
+| ![Settings panel](docs/screenshots/Settings.webp) | |
 | Settings panel | |
 
 ## Install
