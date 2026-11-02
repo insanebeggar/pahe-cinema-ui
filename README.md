@@ -56,7 +56,8 @@ Updates arrive through your userscript manager, usually within a day of a new ve
 
 ### Film and series pages
 
-- A rebuilt header with a large poster, the title, genres, runtime, the IMDb rating, the synopsis and the credits from the original page.
+- A rebuilt header with a large poster, the title, genres, runtime, the IMDb rating, the synopsis and the credits from the original page. Runtime can show as minutes (125 min) or hours (2h 05m), and the same choice applies to the Runtime line in the specification table.
+- A Letterboxd button next to the IMDb one. It uses the IMDb ID, so it lands on the right film page. Letterboxd lists films only, so series pages do not get it.
 - The technical block (source, video, audio, subtitles) becomes a ruled specification table. The trailer and subtitle links inside it keep working.
 - Download buttons are regrouped into rows by quality: resolution and codec on the left, file size in the middle, host buttons on the right. Your original buttons are moved, not replaced.
 - Filters above the downloads let you pick one resolution or one host. The choice is remembered across pages.
@@ -136,6 +137,8 @@ Settings are stored by your userscript manager in your own browser profile. They
 | Layout | Posters, Ledger | Posters |
 | Poster columns | 4, 5, 6 | 5 |
 | Descriptions (ledger) | On, Off | On |
+| Runtime | Minutes, Hours | Minutes |
+| Letterboxd link | On, Off | On |
 | Backdrop | Show, Hide | Show |
 | Dimming | 50 to 100 percent | 80 |
 | Live search | On, Off | On |
@@ -219,10 +222,7 @@ Pull requests are welcome. Please keep the file readable, avoid adding remote sc
 
 ## Changelog
 
-- 4.1: exact TMDb matching by IMDb ID, scored fallback matching, a manual match picker.
-- 4.0: settings panel and Tampermonkey menu, per-user TMDb key, live search with suggestions, cast carousel and directors.
-- 3.2: TMDb posters, ratings, stills and trailer links, dropdown fixes, five-column grid.
-- 3.0 and 3.1: search and list pages, series download rows, contrast guard, cinema header, ledger descriptions, Other-menu grids.
+- 1.1.0: official release with runtime display options, a Letterboxd link on film pages, exact TMDb matching by IMDb ID, scored fallback matching, a manual match picker, settings and Tampermonkey menu controls, per-user TMDb keys, live search with suggestions, cast and director details, TMDb posters, ratings and stills, improved download rows, list and search pages, series support, the cinema header, ledger descriptions and Other-menu grids.
 
 ## Credits and licence
 

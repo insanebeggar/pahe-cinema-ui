@@ -1,15 +1,8 @@
 // ==UserScript==
-// @name         Cinema UI for Pahe
-// @namespace    https://github.com/insanebeggar/pahe-cinema-ui
-// @version      1.0.2
-// @description  Editorial film-catalogue redesign with optional TMDb posters, cast and live search.
-// @author       insane.beggar
-// @license      MIT
-// @icon         https://raw.githubusercontent.com/insanebeggar/pahe-cinema-ui/main/icon.png
-// @homepageURL  https://github.com/insanebeggar/pahe-cinema-ui
-// @supportURL   https://github.com/insanebeggar/pahe-cinema-ui/issues
-// @downloadURL  https://raw.githubusercontent.com/insanebeggar/pahe-cinema-ui/main/pahe-cinema-ui.user.js
-// @updateURL    https://raw.githubusercontent.com/insanebeggar/pahe-cinema-ui/main/pahe-cinema-ui.user.js
+// @name         Pahe Cinema UI (Criterion x MUBI)
+// @namespace    https://pahe.ink/
+// @version      1.1.0
+// @description  Editorial film-catalogue redesign of pahe.ink: spine numbers, film strip, ledger view, rebuilt film and series pages, A-Z list filter, drawer index, full-screen search, contrast guard. Cosmetic only.
 // @match        https://pahe.ink/*
 // @match        https://pahe.in/*
 // @run-at       document-start
@@ -61,6 +54,8 @@
     tmdbExact: 'on',
     cols: 5,
     live: 'on',
+    runtime: 'min',
+    letterboxd: 'on',
   };
   const state = {};
   Object.keys(DEFAULTS).forEach((k) => {
@@ -97,6 +92,45 @@
   function whenReady(fn) {
     if (document.body) fn();
     else document.addEventListener('DOMContentLoaded', fn, { once: true });
+  }
+
+  /* ---- runtime formatting (minutes or hours) ---- */
+  const RT = [];
+  function parseMins(txt) {
+    txt = String(txt || '');
+    const h = txt.match(/(\d+)\s*h(?:ours?|rs?)?\b/i);
+    const m = txt.match(/(\d+)\s*(?:min(?:ute)?s?|mn|m)\b/i);
+    if (!h && !m) return null;
+    return (h ? Number(h[1]) * 60 : 0) + (m ? Number(m[1]) : 0);
+  }
+  function fmtRuntime(raw) {
+    const mins = parseMins(raw);
+    if (mins == null) return raw;
+    const approx = /~/.test(raw) ? '~' : '';
+    if (state.runtime === 'hours' && mins >= 60) {
+      const hh = Math.floor(mins / 60);
+      const mm = mins % 60;
+      return approx + hh + 'h' + (mm ? ' ' + String(mm).padStart(2, '0') + 'm' : '');
+    }
+    return approx + mins + ' min';
+  }
+  function trackRuntime(node, raw) {
+    node.dataset.raw = raw;
+    node.textContent = fmtRuntime(raw);
+    RT.push(node);
+  }
+  UI.push(() => RT.forEach((n) => (n.textContent = fmtRuntime(n.dataset.raw))));
+
+  const letterboxdUrl = (h) =>
+    h.imdb
+      ? 'https://letterboxd.com/imdb/' + h.imdb + '/'
+      : 'https://letterboxd.com/search/films/' + encodeURIComponent(h.name + (h.year ? ' ' + h.year : '')) + '/';
+  function letterboxdLink(h) {
+    const a = el('a', 'pm-cta pm-lb', 'Letterboxd \u2197');
+    a.href = letterboxdUrl(h);
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    return a;
   }
 
   const fonts = document.createElement('link');
@@ -1165,8 +1199,22 @@
       if (stat) info.appendChild(el('p', 'pm-stat', stat));
     }
     info.appendChild(el('div', 'pm-film', name));
-    const line = [year, runtime, released && 'Released ' + released].filter(Boolean).join('  \u00B7  ');
-    if (line) info.appendChild(el('p', 'pm-line', line));
+    const parts = [];
+    if (year) parts.push(document.createTextNode(year));
+    if (runtime) {
+      const rs = el('span', 'pm-rt');
+      trackRuntime(rs, runtime);
+      parts.push(rs);
+    }
+    if (released) parts.push(document.createTextNode('Released ' + released));
+    if (parts.length) {
+      const line = el('p', 'pm-line');
+      parts.forEach((n, i) => {
+        if (i) line.appendChild(document.createTextNode('  \u00B7  '));
+        line.appendChild(n);
+      });
+      info.appendChild(line);
+    }
     if (score) {
       const r = el('div', 'pm-rating');
       r.append(el('b', '', score), el('span', '', 'IMDb' + (votes ? ' \u00B7 ' + votes + ' votes' : '')));
@@ -1210,6 +1258,7 @@
       season: (rel && rel.season) || '',
       start: /[\u2013\u2014-]/.test(year) ? (year.match(/\d{4}/) || [''])[0] : '',
     };
+    if (state.letterboxd === 'on' && !HERO.tv) actions.appendChild(letterboxdLink(HERO));
     remember(name + (rel && rel.season ? ' S' + rel.season : ''), year);
     return true;
   }
@@ -1243,6 +1292,11 @@
       dl.append(el('dt', '', m[1]), dd);
     });
     if (!dl.children.length) return;
+    [...dl.querySelectorAll('dt')].forEach((dt) => {
+      if (!/^runtime$/i.test(dt.textContent.trim())) return;
+      const dd = dt.nextElementSibling;
+      if (dd && !dd.querySelector('a') && parseMins(dd.textContent) != null) trackRuntime(dd, dd.textContent.trim());
+    });
     (code.closest('p') || code).after(dl);
     if (!code.textContent.trim()) code.classList.add('pm-gone');
   }
@@ -2130,6 +2184,18 @@
         store.set('imdbmap', map);
       }
     }
+    const lb = document.querySelector('.pm-lb');
+    if (lb) {
+      if (hit.t === 'tv') lb.remove();
+      else if (!HERO.imdb) lb.href = 'https://letterboxd.com/tmdb/' + hit.i + '/';
+    } else if (hit.t === 'movie' && state.letterboxd === 'on') {
+      const acts = document.querySelector('.pm-actions');
+      if (acts) {
+        const a = letterboxdLink(HERO);
+        if (!HERO.imdb) a.href = 'https://letterboxd.com/tmdb/' + hit.i + '/';
+        acts.appendChild(a);
+      }
+    }
     let d = null;
     try {
       d = await tmdbGet('/' + hit.t + '/' + hit.i, { append_to_response: 'credits,videos,images', include_image_language: 'en,null' });
@@ -2588,6 +2654,8 @@
     a.appendChild(row('Layout', 'Posters or the ledger list.', segc('view', [['grid', 'Posters'], ['ledger', 'Ledger']])));
     a.appendChild(row('Poster columns', 'On wide screens. Smaller screens step down on their own.', segc('cols', [[4, '4'], [5, '5'], [6, '6']])));
     a.appendChild(row('Descriptions', 'Synopsis under each title in the ledger.', segc('desc', ONOFF)));
+    a.appendChild(row('Runtime', 'Show film length as 125 min or as 2h 05m on film pages.', segc('runtime', [['min', 'Minutes'], ['hours', 'Hours']])));
+    a.appendChild(row('Letterboxd link', 'Adds a Letterboxd button to film pages. Letterboxd lists films only, so series get none.', segc('letterboxd', ONOFF, true)));
     a.appendChild(row('Backdrop', 'A soft glow from the current poster or still, plus the site\u2019s own background picture.', segc('bg', [['on', 'Show'], ['off', 'Hide']])));
     const range = el('input');
     range.type = 'range';
