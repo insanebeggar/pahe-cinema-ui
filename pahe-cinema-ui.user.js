@@ -1,8 +1,15 @@
 // ==UserScript==
-// @name         Pahe Cinema UI (Criterion x MUBI)
-// @namespace    https://pahe.ink/
-// @version      1.1.0
-// @description  Editorial film-catalogue redesign of pahe.ink: spine numbers, film strip, ledger view, rebuilt film and series pages, A-Z list filter, drawer index, full-screen search, contrast guard. Cosmetic only.
+// @name         Cinema UI for Pahe
+// @namespace    https://github.com/insanebeggar/pahe-cinema-ui
+// @version      1.1.1
+// @description  Editorial film-catalogue redesign with optional TMDb posters, cast and live search.
+// @author       insane.beggar
+// @license      MIT
+// @icon         https://raw.githubusercontent.com/insanebeggar/pahe-cinema-ui/main/icon.png
+// @homepageURL  https://github.com/insanebeggar/pahe-cinema-ui
+// @supportURL   https://github.com/insanebeggar/pahe-cinema-ui/issues
+// @downloadURL  https://raw.githubusercontent.com/insanebeggar/pahe-cinema-ui/main/pahe-cinema-ui.user.js
+// @updateURL    https://raw.githubusercontent.com/insanebeggar/pahe-cinema-ui/main/pahe-cinema-ui.user.js
 // @match        https://pahe.ink/*
 // @match        https://pahe.in/*
 // @run-at       document-start
