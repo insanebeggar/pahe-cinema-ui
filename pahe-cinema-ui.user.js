@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cinema UI for Pahe
 // @namespace    https://github.com/insanebeggar/pahe-cinema-ui
-// @version      1.1.1
+// @version      1.2.0
 // @description  Editorial film-catalogue redesign with optional TMDb posters, cast and live search.
 // @author       insane.beggar
 // @license      MIT
@@ -63,6 +63,7 @@
     live: 'on',
     runtime: 'min',
     letterboxd: 'on',
+    lbrating: 'on',
   };
   const state = {};
   Object.keys(DEFAULTS).forEach((k) => {
@@ -132,12 +133,110 @@
     h.imdb
       ? 'https://letterboxd.com/imdb/' + h.imdb + '/'
       : 'https://letterboxd.com/search/films/' + encodeURIComponent(h.name + (h.year ? ' ' + h.year : '')) + '/';
+  function svgEl(tag, attrs) {
+    const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs).forEach((k) => n.setAttribute(k, attrs[k]));
+    return n;
+  }
+  function iconIMDb() {
+    const s = svgEl('svg', { viewBox: '0 0 40 20', width: '34', height: '17', 'aria-hidden': 'true', class: 'pm-ico' });
+    s.appendChild(svgEl('rect', { width: '40', height: '20', rx: '3', fill: '#F5C518' }));
+    const t = svgEl('text', { x: '20', y: '15', 'text-anchor': 'middle', 'font-family': 'Arial Black, Arial, sans-serif', 'font-weight': '900', 'font-size': '13', fill: '#000' });
+    t.textContent = 'IMDb';
+    s.appendChild(t);
+    return s;
+  }
+  function iconLetterboxd(size) {
+    const k = size || 16;
+    const s = svgEl('svg', { viewBox: '0 0 30 16', width: String(Math.round(k * 1.875)), height: String(k), 'aria-hidden': 'true', class: 'pm-ico' });
+    s.appendChild(svgEl('circle', { cx: '8', cy: '8', r: '7', fill: '#FF8000' }));
+    s.appendChild(svgEl('circle', { cx: '15', cy: '8', r: '7', fill: '#00E054', 'fill-opacity': '.92' }));
+    s.appendChild(svgEl('circle', { cx: '22', cy: '8', r: '7', fill: '#40BCF4', 'fill-opacity': '.92' }));
+    return s;
+  }
+
   function letterboxdLink(h) {
-    const a = el('a', 'pm-cta pm-lb', 'Letterboxd \u2197');
+    const a = el('a', 'pm-cta pm-lb');
+    a.append(iconLetterboxd(16), document.createTextNode('Letterboxd \u2197'));
     a.href = letterboxdUrl(h);
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     return a;
+  }
+
+  function gmText(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest !== 'function') {
+        reject(new Error('no GM_xmlhttpRequest'));
+        return;
+      }
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url,
+        timeout: 15000,
+        headers: { Accept: 'text/html' },
+        onload: (r) => {
+          if (r.status >= 400) reject(Object.assign(new Error('HTTP ' + r.status), { status: r.status }));
+          else resolve({ text: String(r.responseText || ''), finalUrl: r.finalUrl || url });
+        },
+        onerror: reject,
+        ontimeout: () => reject(new Error('timeout')),
+      });
+    });
+  }
+
+  function parseLetterboxd(html) {
+    const blk = (html.match(/"aggregateRating"\s*:\s*\{[\s\S]*?\}/) || [])[0];
+    if (blk) {
+      const rv = (blk.match(/"ratingValue"\s*:\s*"?([\d.]+)/) || [])[1];
+      const rc = (blk.match(/"ratingCount"\s*:\s*"?(\d+)/) || [])[1];
+      if (rv) return { r: Number(rv), n: rc ? Number(rc) : 0 };
+    }
+    const m = html.match(/name="twitter:data2"\s+content="([\d.]+)\s+out of 5"/i) || html.match(/content="([\d.]+)\s+out of 5"\s+name="twitter:data2"/i);
+    return m ? { r: Number(m[1]), n: 0 } : null;
+  }
+
+  const shortCount = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n));
+
+  async function letterboxdInfo(tt, tmdbId) {
+    const key = tt ? 'i:' + tt : tmdbId ? 't:' + tmdbId : '';
+    if (!key) return null;
+    const cache = store.get('lbcache', {}) || {};
+    const c = cache[key];
+    if (c && Date.now() - c.t < 3 * 864e5) return c.v || null;
+    const url = tt ? 'https://letterboxd.com/imdb/' + tt + '/' : 'https://letterboxd.com/tmdb/' + tmdbId + '/';
+    let v = null;
+    try {
+      const res = await gmText(url);
+      v = parseLetterboxd(res.text);
+      if (v) v.u = res.finalUrl || url;
+    } catch (e) {
+      return null;
+    }
+    const fresh = store.get('lbcache', {}) || {};
+    fresh[key] = { t: Date.now(), v: v || 0 };
+    const keys = Object.keys(fresh);
+    if (keys.length > 300) keys.slice(0, keys.length - 300).forEach((k) => delete fresh[k]);
+    store.set('lbcache', fresh);
+    return v;
+  }
+
+  async function enrichLetterboxd(tt, tmdbId) {
+    if (state.letterboxd !== 'on' || state.lbrating !== 'on' || document.querySelector('.pm-lbr')) return;
+    const v = await letterboxdInfo(tt, tmdbId);
+    const rates = document.querySelector('.pm-rates');
+    if (!v || !rates || rates.querySelector('.pm-lbr')) return;
+    const box = el('a', 'pm-rating pm-lbr');
+    box.href = v.u;
+    box.target = '_blank';
+    box.rel = 'noopener noreferrer';
+    box.title = 'Open on Letterboxd';
+    const cap = el('span', '');
+    cap.append(iconLetterboxd(11), document.createTextNode(' Letterboxd' + (v.n ? ' \u00B7 ' + shortCount(v.n) + ' ratings' : '') + ' \u00B7 out of 5'));
+    box.append(el('b', '', v.r.toFixed(1)), cap);
+    rates.appendChild(box);
+    const lb = document.querySelector('.pm-lb');
+    if (lb && v.u) lb.href = v.u;
   }
 
   const fonts = document.createElement('link');
@@ -461,7 +560,7 @@
   .pm-credits dt{font:500 10px/1.9 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--mu)}
   .pm-credits dd{font-size:15px}
   .pm-actions{display:flex;flex-wrap:wrap;gap:12px}
-  body a.pm-cta{display:inline-block;padding:15px 24px;border:1px solid var(--ink);font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink);transition:background .2s,color .2s}
+  body a.pm-cta{display:inline-flex;align-items:center;gap:10px;padding:15px 24px;border:1px solid var(--ink);font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink);transition:background .2s,color .2s}
   body a.pm-cta:hover{background:var(--ink);color:var(--bg);text-decoration:none}
   body a.pm-cta.pm-solid{background:var(--ink);color:var(--bg)}
   body a.pm-cta.pm-solid:hover{background:var(--sig);border-color:var(--sig);color:#fff}
@@ -763,6 +862,19 @@
   .pm-pickres img{display:block;width:52px;height:78px;object-fit:cover;background:var(--bg2)}
   .pm-pt{display:block;font:400 26px/1.1 var(--serif)}
   .pm-ps{display:block;margin-top:5px;font:400 11px/1.5 var(--mono);letter-spacing:.03em;color:var(--mu)}
+  .pm-ico{display:block;flex:none;max-width:none}
+  .pm-ico text{text-transform:none;letter-spacing:0;font-style:normal}
+  .pm-rates{display:flex;flex-wrap:wrap;gap:14px 56px;margin:0 0 26px}
+  .pm-rates:empty{display:none}
+  .pm-rates .pm-rating{margin:0}
+  body a.pm-lbr{text-decoration:none;color:inherit}
+  .pm-lbr span{display:inline-flex;align-items:center;gap:4px}
+  .pm-pbtn{all:unset;cursor:pointer;display:inline-block;margin-top:10px;padding:5px 0;border-bottom:1px solid var(--ink);font:500 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+  .pm-pbtn:hover{color:var(--sig);border-bottom-color:var(--sig)}
+  .pm-lsug li button.pm-lalt{display:block;padding:14px 12px;font:500 10px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  body a.pm-lpa{display:grid;grid-template-columns:40px minmax(0,1fr);gap:14px;align-items:center;padding:10px 12px;text-decoration:none}
+  .pm-lpa img{display:block;width:40px;height:60px;object-fit:cover;background:var(--bg2)}
+  .pm-lmore{all:unset;cursor:pointer;display:inline-block;margin:14px 12px;padding:10px 0;border-bottom:1px solid var(--ink);font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
   .pm-mfine{margin:34px 0 0;font:400 10px/1.7 var(--mono);letter-spacing:.06em;color:var(--mu)}
   @media (max-width:700px){.pm-mrow{grid-template-columns:1fr}}
 
@@ -1222,11 +1334,13 @@
       });
       info.appendChild(line);
     }
+    const rates = el('div', 'pm-rates');
     if (score) {
       const r = el('div', 'pm-rating');
       r.append(el('b', '', score), el('span', '', 'IMDb' + (votes ? ' \u00B7 ' + votes + ' votes' : '')));
-      info.appendChild(r);
+      rates.appendChild(r);
     }
+    info.appendChild(rates);
     if (teaser) info.appendChild(el('p', 'pm-teaser', teaser));
 
     const credits = el('dl', 'pm-credits');
@@ -1243,7 +1357,9 @@
     cta.href = '#pm-editions';
     actions.appendChild(cta);
     if (imdbLink && imdbLink.href) {
-      const ia = el('a', 'pm-cta', 'IMDb \u2197');
+      const ia = el('a', 'pm-cta pm-imdb');
+      ia.setAttribute('aria-label', 'Open on IMDb');
+      ia.append(iconIMDb(), document.createTextNode('\u2197'));
       ia.href = imdbLink.href;
       ia.target = '_blank';
       ia.rel = 'noopener noreferrer';
@@ -1540,6 +1656,7 @@
   const TMDB = 'https://api.themoviedb.org/3';
   const IMG = 'https://image.tmdb.org/t/p/';
   let HERO = null;
+  let SEARCH = null;
 
   function gmJSON(url, headers) {
     return new Promise((resolve, reject) => {
@@ -1876,7 +1993,7 @@
     return arr.filter((x) => x && x.id != null && !seen.has(x.id) && seen.add(x.id));
   };
 
-  function personCard(p, cls) {
+  function personCard(p, cls, role) {
     const li = el('li', cls || '');
     const a = el('a', 'pm-pc');
     a.href = personUrl(p.id);
@@ -1895,6 +2012,15 @@
     }
     a.append(fig, el('b', '', p.name), el('i', '', p.role || ''));
     li.appendChild(a);
+    if (role) {
+      const b = el('button', 'pm-pbtn', 'Find on Pahe');
+      b.type = 'button';
+      b.title = 'Every film and series with ' + p.name + ' that Pahe has';
+      b.addEventListener('click', () => {
+        if (SEARCH) SEARCH.openPerson({ id: p.id, name: p.name, role, photo: p.profile_path });
+      });
+      li.appendChild(b);
+    }
     return li;
   }
 
@@ -1940,7 +2066,7 @@
       const left = el('div', 'pm-dir');
       left.appendChild(el('h3', '', label));
       const ul = el('ul', 'pm-dirrow');
-      dirs.slice(0, 4).forEach((p) => ul.appendChild(personCard(p)));
+      dirs.slice(0, 4).forEach((p) => ul.appendChild(personCard(p, '', p.role === 'Creator' ? 'creator' : 'director')));
       left.appendChild(ul);
       sec.appendChild(left);
     }
@@ -1976,7 +2102,7 @@
     const wrap = el('div', 'pm-cwrap');
     const ul = el('ul', 'pm-castrow');
     cast.forEach((c, i) => {
-      const li = personCard({ id: c.id, name: c.name, profile_path: c.profile_path, role: c.character }, '');
+      const li = personCard({ id: c.id, name: c.name, profile_path: c.profile_path, role: c.character }, '', 'actor');
       const a = li.querySelector('a');
       a.querySelector('.pm-pf').appendChild(el('em', 'pm-ci', String(i + 1).padStart(2, '0')));
       ul.appendChild(li);
@@ -2191,6 +2317,7 @@
         store.set('imdbmap', map);
       }
     }
+    if (!HERO.imdb && hit.t === 'movie') enrichLetterboxd('', hit.i).catch(() => {});
     const lb = document.querySelector('.pm-lb');
     if (lb) {
       if (hit.t === 'tv') lb.remove();
@@ -2424,7 +2551,7 @@
         const end = Math.min(i + 400, list.length);
         for (; i < end; i++) {
           const e = list[i];
-          if (e.closest('.pm-pill,.pm-search,.pm-flag,.pm-stat,.entry')) continue;
+          if (e.closest('.pm-pill,.pm-search,.pm-flag,.pm-stat,.entry,svg')) continue;
           const cs = getComputedStyle(e);
           const fg = rgbOf(cs.color);
           if (!fg || fg.a < 0.1) continue;
@@ -2663,6 +2790,7 @@
     a.appendChild(row('Descriptions', 'Synopsis under each title in the ledger.', segc('desc', ONOFF)));
     a.appendChild(row('Runtime', 'Show film length as 125 min or as 2h 05m on film pages.', segc('runtime', [['min', 'Minutes'], ['hours', 'Hours']])));
     a.appendChild(row('Letterboxd link', 'Adds a Letterboxd button to film pages. Letterboxd lists films only, so series get none.', segc('letterboxd', ONOFF, true)));
+    a.appendChild(row('Letterboxd rating', 'Shows the Letterboxd average next to the IMDb score. Reads the film page on letterboxd.com, cached for three days.', segc('lbrating', ONOFF, true)));
     a.appendChild(row('Backdrop', 'A soft glow from the current poster or still, plus the site\u2019s own background picture.', segc('bg', [['on', 'Show'], ['off', 'Hide']])));
     const range = el('input');
     range.type = 'range';
@@ -2683,7 +2811,8 @@
     const clearT = btn('Clear TMDb cache', () => {
       store.set('tmdbcache', {});
       store.set('trend', null);
-      toast('TMDb cache cleared.');
+      store.set('lbcache', {});
+      toast('Caches cleared.');
     });
     const clearM = btn('Clear manual matches', () => {
       store.set('tmdbfix', {});
@@ -2839,7 +2968,11 @@
     const left = el('section', 'pm-lcol');
     const resUl = el('ul', 'pm-lres');
     const msg = el('p', 'pm-lmsg', '');
-    left.append(el('h4', '', 'On Pahe'), resUl, msg);
+    const resH = el('h4', '', 'On Pahe');
+    const moreBtn = el('button', 'pm-lmore', '');
+    moreBtn.type = 'button';
+    moreBtn.hidden = true;
+    left.append(resH, resUl, msg, moreBtn);
     const right = el('section', 'pm-lcol');
     const sugH = el('h4', '', 'Suggestions');
     const sugUl = el('ul', 'pm-lsug');
@@ -2857,6 +2990,7 @@
     let ghostFull = '';
     let mode = null;
     let act = -1;
+    let person = null;
     const liveOn = () => state.live === 'on';
     const remember = (q) => {
       q = (q || '').trim();
@@ -2898,6 +3032,28 @@
       ghost.append(el('span', 'pm-gv', q), document.createTextNode(top.label.slice(q.length)));
     }
 
+    const seriesLike = (r) => !!(r.p.season || /\bSeason\b/i.test(r.raw));
+
+    function makeRow(r, q, note) {
+      const li = el('li');
+      const a = el('a', 'pm-lr');
+      a.href = r.href;
+      a.addEventListener('click', () => remember(input.value));
+      const im = el('img');
+      im.alt = '';
+      im.loading = 'lazy';
+      if (r.img) im.src = r.img;
+      const mid = el('div', 'pm-lmid');
+      const tt = el('div', 'pm-lt');
+      tt.appendChild(hl(r.p.name || r.raw, q));
+      const metaBits = [r.p.year, r.p.season && 'Season ' + r.p.season, r.p.complete && 'Complete', r.p.edition, note].filter(Boolean).join(' \u00B7 ');
+      mid.append(tt, el('div', 'pm-lm', metaBits));
+      const f = el('div', 'pm-lf', [r.p.source, r.p.res.length ? r.p.res.join(' / ') : ''].filter(Boolean).join(' \u2014 '));
+      a.append(im, mid, f);
+      li.appendChild(a);
+      return li;
+    }
+
     function renderSite() {
       resUl.textContent = '';
       msg.textContent = '';
@@ -2909,28 +3065,11 @@
         return;
       }
       let list = site.list;
-      if (chip !== 'all') list = list.filter((r) => (chip === 'tv') === !!(r.p.season || /\bSeason\b/i.test(r.raw)));
-      list.forEach((r) => {
-        const li = el('li');
-        const a = el('a', 'pm-lr');
-        a.href = r.href;
-        a.addEventListener('click', () => remember(input.value));
-        const im = el('img');
-        im.alt = '';
-        im.loading = 'lazy';
-        if (r.img) im.src = r.img;
-        const mid = el('div', 'pm-lmid');
-        const tt = el('div', 'pm-lt');
-        tt.appendChild(hl(r.p.name || r.raw, q));
-        const metaBits = [r.p.year, r.p.season && 'Season ' + r.p.season, r.p.complete && 'Complete', r.p.edition].filter(Boolean).join(' \u00B7 ');
-        mid.append(tt, el('div', 'pm-lm', metaBits));
-        const f = el('div', 'pm-lf', [r.p.source, r.p.res.length ? r.p.res.join(' / ') : ''].filter(Boolean).join(' \u2014 '));
-        a.append(im, mid, f);
-        li.appendChild(a);
-        resUl.appendChild(li);
-      });
+      if (chip !== 'all') list = list.filter((r) => (chip === 'tv') === seriesLike(r));
+      list.forEach((r) => resUl.appendChild(makeRow(r, q, '')));
       if (!list.length) msg.textContent = site.list.length ? 'Nothing of that kind here. Try All.' : 'Nothing on Pahe for \u201C' + q + '\u201D yet. Try a suggestion.';
       count.textContent = list.length + ' shown' + (site.pages ? ' \u00B7 ' + site.pages : '');
+      seeAll.hidden = false;
       seeAll.href = '/?s=' + encodeURIComponent(q);
     }
 
@@ -2951,7 +3090,7 @@
       sugH.hidden = !list.length && !mode;
       if (mode) {
         const li = el('li');
-        const b = el('button', '', '\u2190 Back');
+        const b = el('button', 'pm-lalt', '\u2190 Back');
         b.type = 'button';
         b.addEventListener('click', () => {
           mode = null;
@@ -2959,6 +3098,14 @@
         });
         li.appendChild(b);
         sugUl.appendChild(li);
+        if (mode.id) {
+          const li2 = el('li');
+          const b2 = el('button', 'pm-lalt', 'All of ' + mode.name + ' on Pahe \u2192');
+          b2.type = 'button';
+          b2.addEventListener('click', () => startPerson({ id: mode.id, name: mode.name, role: mode.role, photo: mode.photo }));
+          li2.appendChild(b2);
+          sugUl.appendChild(li2);
+        }
       }
       list.forEach((sg) => {
         const li = el('li');
@@ -2975,6 +3122,9 @@
         b.addEventListener('click', () => {
           if (sg.type === 'person') {
             mode = {
+              id: sg.id,
+              role: /direct/i.test(sg.sub) ? 'director' : 'actor',
+              photo: sg.img,
               name: sg.label,
               known: sg.known.map((k) => ({ type: k.tv ? 'tv' : 'movie', label: k.label, sub: (k.tv ? 'Series' : 'Film') + (k.year ? ' \u00B7 ' + k.year : ''), img: k.img })),
             };
@@ -2986,6 +3136,150 @@
         sugUl.appendChild(li);
       });
     }
+
+    const JOBS = { director: ['Director'], creator: ['Creator', 'Director'] };
+
+    async function loadCredits(p) {
+      const d = await tmdbGet('/person/' + p.id + '/combined_credits');
+      const thisYear = new Date().getFullYear();
+      let raw;
+      if (p.role === 'actor') raw = (d.cast || []).filter((c) => !/^(self|himself|herself|themselves)\b/i.test(c.character || '') && !(c.genre_ids || []).some((g) => g === 10767 || g === 10763));
+      else raw = (d.crew || []).filter((c) => (JOBS[p.role] || JOBS.director).includes(c.job));
+      const seen = new Set();
+      const out = [];
+      raw.forEach((c) => {
+        const type = c.media_type === 'tv' ? 'tv' : 'movie';
+        const title = c.title || c.name;
+        const yr = String(c.release_date || c.first_air_date || '').slice(0, 4);
+        const k = type + c.id;
+        if (!title || seen.has(k) || (yr && Number(yr) > thisYear)) return;
+        seen.add(k);
+        out.push({ type, title, year: yr, votes: c.vote_count || 0, note: c.character ? 'as ' + c.character.replace(/\s*\(.*?\)\s*/g, ' ').trim() : c.job || '' });
+      });
+      out.sort((x, y) => y.votes - x.votes);
+      return out.slice(0, 200);
+    }
+
+    const credMatch = (c, r) => {
+      if (norm(r.p.name || r.raw) !== norm(c.title)) return false;
+      if (c.type === 'tv') return seriesLike(r);
+      if (seriesLike(r)) return false;
+      return !c.year || !r.p.year || String(r.p.year) === String(c.year);
+    };
+
+    function renderPersonSide(P) {
+      sugUl.textContent = '';
+      sugH.textContent = 'Filmography';
+      sugH.hidden = false;
+      const li = el('li');
+      const a = el('a', 'pm-lpa');
+      a.href = 'https://www.themoviedb.org/person/' + P.id;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      const im = el('img');
+      im.alt = '';
+      if (P.photo) im.src = IMG + 'w92' + P.photo;
+      const mid = el('span', 'pm-sm');
+      mid.append(el('span', 'pm-sl', P.name), el('span', 'pm-ss', (P.role === 'actor' ? 'Cast' : P.role === 'creator' ? 'Creator' : 'Director') + ' \u00B7 open on TMDb \u2197'));
+      a.append(im, mid);
+      li.appendChild(a);
+      sugUl.appendChild(li);
+      const li2 = el('li');
+      const b = el('button', 'pm-lalt', P.role === 'actor' ? 'Also as director' : 'Also as actor');
+      b.type = 'button';
+      b.addEventListener('click', () => startPerson({ id: P.id, name: P.name, role: P.role === 'actor' ? 'director' : 'actor', photo: P.photo }));
+      li2.appendChild(b);
+      sugUl.appendChild(li2);
+    }
+
+    function renderPerson() {
+      const P = person;
+      if (!P) return;
+      resUl.textContent = '';
+      let list = P.found.slice().sort((x, y) => (Number(y.c.year) || 0) - (Number(x.c.year) || 0));
+      if (chip !== 'all') list = list.filter(({ r }) => (chip === 'tv') === seriesLike(r));
+      list.forEach(({ r, c }) => resUl.appendChild(makeRow(r, '', c.note)));
+      count.textContent = P.found.length + ' on Pahe';
+      seeAll.hidden = true;
+      seeAll.href = '/?s=' + encodeURIComponent(P.name);
+      const left = P.credits ? P.credits.length - P.pos : 0;
+      if (P.scanning) msg.textContent = 'Checking ' + P.done + ' of ' + P.pos + ' titles\u2026';
+      else if (!P.found.length) msg.textContent = 'None of the ' + P.pos + ' titles checked are on Pahe.' + (left ? ' Check more below.' : '');
+      else msg.textContent = 'Checked ' + P.done + ' titles.' + (left ? ' ' + left + ' more not checked yet.' : '');
+      moreBtn.hidden = P.scanning || !left;
+      moreBtn.textContent = 'Check ' + Math.min(30, left) + ' more titles';
+    }
+
+    async function scanMore(my) {
+      const P = person;
+      if (!P || !P.credits || P.scanning) return;
+      P.scanning = true;
+      moreBtn.hidden = true;
+      const batch = P.credits.slice(P.pos, P.pos + 30);
+      P.pos += batch.length;
+      let i = 0;
+      const worker = async () => {
+        while (i < batch.length) {
+          const c = batch[i++];
+          if (my !== seq) return;
+          try {
+            const site = await siteSearch(c.type === 'movie' && c.year ? c.title + ' ' + c.year : c.title);
+            site.list.forEach((r) => {
+              if (credMatch(c, r) && !P.seen.has(r.href)) {
+                P.seen.add(r.href);
+                P.found.push({ r, c });
+              }
+            });
+          } catch (e) {
+            /* skip this title */
+          }
+          P.done++;
+          if (my === seq) renderPerson();
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      if (my !== seq) return;
+      P.scanning = false;
+      renderPerson();
+    }
+
+    async function startPerson(p) {
+      const my = ++seq;
+      person = Object.assign({ found: [], seen: new Set(), pos: 0, done: 0, credits: null, scanning: false }, p);
+      mode = null;
+      data = null;
+      ghost.textContent = '';
+      ghostFull = '';
+      live.hidden = false;
+      bar.hidden = false;
+      cols.hidden = false;
+      recent.hidden = true;
+      resH.textContent = p.name + ' on Pahe';
+      resUl.textContent = '';
+      moreBtn.hidden = true;
+      count.textContent = '';
+      renderPersonSide(person);
+      setAct(-1);
+      if (!tmdbOn()) {
+        msg.textContent = 'Filmographies come from TMDb. Add a key in Settings to use this.';
+        return;
+      }
+      msg.textContent = 'Loading filmography\u2026';
+      try {
+        person.credits = await loadCredits(p);
+      } catch (e) {
+        if (my === seq) msg.textContent = 'Could not load the filmography from TMDb.';
+        return;
+      }
+      if (my !== seq) return;
+      if (!person.credits.length) {
+        msg.textContent = 'TMDb lists no ' + (p.role === 'actor' ? 'acting' : 'directing') + ' credits for this person.';
+        return;
+      }
+      scanMore(my);
+    }
+
+    moreBtn.addEventListener('click', () => scanMore(seq));
 
     function showRecent() {
       recent.textContent = '';
@@ -3009,6 +3303,9 @@
 
     async function run(q) {
       const my = ++seq;
+      person = null;
+      resH.textContent = 'On Pahe';
+      moreBtn.hidden = true;
       live.hidden = false;
       bar.hidden = false;
       cols.hidden = false;
@@ -3027,6 +3324,12 @@
 
     input.addEventListener('input', () => {
       clearTimeout(timer);
+      if (person) {
+        person = null;
+        seq++;
+        resH.textContent = 'On Pahe';
+        moreBtn.hidden = true;
+      }
       const q = input.value.trim();
       updateGhost();
       if (!liveOn()) return;
@@ -3064,7 +3367,8 @@
       b.addEventListener('click', () => {
         chip = b.dataset.v;
         chips.forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
-        renderSite();
+        if (person) renderPerson();
+        else renderSite();
         setAct(-1);
       })
     );
@@ -3088,9 +3392,18 @@
     const close = () => {
       root.classList.remove('pm-searching');
       seq++;
+      person = null;
+    };
+    const openPerson = (pp) => {
+      closeIndex();
+      closeSettings();
+      closePicker();
+      root.classList.add('pm-searching');
+      input.value = pp.name;
+      startPerson(pp);
     };
     sx.addEventListener('click', close);
-    return { open, close };
+    return { open, close, openPerson };
   }
 
   /* ------------------------------------------------------------------ */
@@ -3166,6 +3479,7 @@
     }
 
     const S = buildSearch(closeIndex);
+    SEARCH = S;
 
     const pill = el('nav', 'pm-pill');
     pill.setAttribute('aria-label', 'Quick controls');
@@ -3177,6 +3491,11 @@
       pill.appendChild(b);
       return b;
     };
+
+    const goHome = () => window.location.assign("/");
+    if (window.location.pathname !== "/") {
+        mk('Home', goHome, 'Go to the home page (h)');
+    }
 
     const toggleIndex = () => root.classList.toggle('pm-index');
     mk('Index', toggleIndex, 'Open the index drawer (i)');
@@ -3238,6 +3557,9 @@
         case 'v':
           if (viewBtn) toggleView();
           break;
+        case 'h':
+          goHome();
+          break;
         case 'f':
           if (filterInput) {
             e.preventDefault();
@@ -3295,6 +3617,9 @@
     safe(buildSpec);
     safe(buildEditions);
     safe(fixPostNav);
+    safe(() => {
+      if (HERO && !HERO.tv && HERO.imdb) enrichLetterboxd(HERO.imdb, '').catch(() => {});
+    });
     const filterInput = safe(enhanceLists) || safe(enhanceGrids);
     safe(buildMast);
     safe(buildAmbient);
