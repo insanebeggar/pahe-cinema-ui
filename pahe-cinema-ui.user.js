@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cinema UI for Pahe
 // @namespace    https://github.com/insanebeggar/pahe-cinema-ui
-// @version      1.2.0
+// @version      1.2.1
 // @description  Editorial film-catalogue redesign with optional TMDb posters, cast and live search.
 // @author       insane.beggar
 // @license      MIT
@@ -20,6 +20,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
 // @connect      api.themoviedb.org
+// @connect      letterboxd.com
 // ==/UserScript==
 
 (function () {
