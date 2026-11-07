@@ -57,7 +57,8 @@ Updates arrive through your userscript manager, usually within a day of a new ve
 ### Film and series pages
 
 - A rebuilt header with a large poster, the title, genres, runtime, the IMDb rating, the synopsis and the credits from the original page. Runtime can show as minutes (125 min) or hours (2h 05m), and the same choice applies to the Runtime line in the specification table.
-- A Letterboxd button next to the IMDb one. It uses the IMDb ID, so it lands on the right film page. Letterboxd lists films only, so series pages do not get it.
+- IMDb and Letterboxd buttons, each with its logo. The Letterboxd button uses the IMDb ID, so it lands on the right film page. Letterboxd lists films only, so series pages do not get it.
+- The Letterboxd average rating next to the IMDb score, with the number of ratings. The script reads it from the Letterboxd film page and keeps it for three days.
 - The technical block (source, video, audio, subtitles) becomes a ruled specification table. The trailer and subtitle links inside it keep working.
 - Download buttons are regrouped into rows by quality: resolution and codec on the left, file size in the middle, host buttons on the right. Your original buttons are moved, not replaced.
 - Filters above the downloads let you pick one resolution or one host. The choice is remembered across pages.
@@ -89,6 +90,12 @@ Press `/` or use the Search button. The overlay is described in [Live search](#l
 ### Index drawer
 
 The sidebar widgets (recent, popular, comments, tags, archives, categories) move into a drawer that slides in from the right. It also holds the quick display settings.
+
+### Find a person's films on Pahe
+
+Every director, creator and cast card has a "Find on Pahe" button. It opens the search overlay and lists every film and series of that person that Pahe has. The site's own search only matches titles, so the script works from the person's TMDb filmography instead. It takes their credits, most-voted first, and searches Pahe for each title 30 at a time, three requests at once. Results appear as they are found, with the role next to each title. A button at the bottom checks the next 30. Films and Series switches filter the list, and "Also as actor" or "Also as director" scans the person's other role.
+
+The same scan starts from live search: choose a person among the suggestions, then "All of ... on Pahe".
 
 ## TMDb features
 
@@ -139,6 +146,7 @@ Settings are stored by your userscript manager in your own browser profile. They
 | Descriptions (ledger) | On, Off | On |
 | Runtime | Minutes, Hours | Minutes |
 | Letterboxd link | On, Off | On |
+| Letterboxd rating | On, Off | On |
 | Backdrop | Show, Hide | Show |
 | Dimming | 50 to 100 percent | 80 |
 | Live search | On, Off | On |
@@ -180,7 +188,8 @@ Shortcuts are ignored while you are typing in a field.
 - Settings, caches, your recent pages and the list of episode tabs you have seen are stored locally by your userscript manager. Nothing is sent to the author. There are no analytics.
 - With TMDb on, the script sends film titles, IMDb IDs and your own key to `api.themoviedb.org`, and loads images from `image.tmdb.org`.
 - Fonts (Instrument Serif, Inter and IBM Plex Mono) load from Google Fonts. If that is blocked, the page falls back to Georgia and system fonts.
-- Live search and "Exact matching" request pages from the site itself, in the same way your browser would when you open them.
+- Live search, "Exact matching" and the "Find on Pahe" scans request pages from the site itself, the same way your browser would when you open them. A scan of 30 titles makes about 30 search requests, so use it in moderation.
+- With the Letterboxd rating on, the script requests the film's page on `letterboxd.com`. Letterboxd has no public rating API, so the script reads the number from the page, which can stop working if Letterboxd changes its markup.
 - Trailer buttons are plain links. Nothing loads from YouTube until you click one.
 
 ## Troubleshooting
@@ -190,6 +199,9 @@ Check that the script is enabled in your manager. On Chrome or Edge, turn on "Al
 
 TMDb data does not appear.
 Add a key in Settings, press Test, Save, and reload. If Test fails with 401, the key is wrong. The first load of a page fills the cache, so some cards update a moment after the page shows.
+
+The Letterboxd rating does not appear.
+Turn on both "Letterboxd link" and "Letterboxd rating" in Settings, and make sure your manager allowed the connection to letterboxd.com. Some films have no rating yet. Letterboxd may also block automated requests at times, in which case the rating shows up on a later visit.
 
 A film shows the wrong poster or cast.
 Use "Wrong match?" on the film page. For stale results elsewhere, clear the TMDb cache in Settings > Data.
@@ -222,6 +234,7 @@ Pull requests are welcome. Please keep the file readable, avoid adding remote sc
 
 ## Changelog
 
+- 1.2.0: IMDb and Letterboxd logos on the buttons, Letterboxd rating, "Find on Pahe" for directors, creators and cast.
 - 1.1.0: official release with runtime display options, a Letterboxd link on film pages, exact TMDb matching by IMDb ID, scored fallback matching, a manual match picker, settings and Tampermonkey menu controls, per-user TMDb keys, live search with suggestions, cast and director details, TMDb posters, ratings and stills, improved download rows, list and search pages, series support, the cinema header, ledger descriptions and Other-menu grids.
 
 ## Credits and licence
