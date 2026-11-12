@@ -77,6 +77,12 @@ Updates arrive through your userscript manager, usually within a day of a new ve
 - Dropdown menus open under their own button, size to their longest entry, and flip sideways if they would leave the screen.
 - A sticky navigation bar, with the theme's extra arrow marks removed.
 
+### Pop-up and redirect protection
+
+- A best-effort blocker runs before the page is ready and rejects `window.open` calls to untrusted domains.
+- It also blocks synthetic external `_blank` links, suspicious global click handlers, transparent full-screen overlays and sponsored redirect links such as `theshorten.net`.
+- Links to Pahe, TMDb, Letterboxd, IMDb and YouTube continue to work. This is a browser-side nuisance blocker, not a replacement for an ad blocker or a security boundary.
+
 ### Colour and background
 
 - Two moods: MUBI (near-black) and Criterion (warm paper).
@@ -200,6 +206,9 @@ Check that the script is enabled in your manager. On Chrome or Edge, turn on "Al
 TMDb data does not appear.
 Add a key in Settings, press Test, Save, and reload. If Test fails with 401, the key is wrong. The first load of a page fills the cache, so some cards update a moment after the page shows.
 
+A site control or download link no longer works.
+The pop-up protection is intentionally conservative about injected redirects, but a site change can make it mistake a new overlay or handler for an ad. Temporarily disable the script to confirm, then open an issue with the page address and the affected link.
+
 The Letterboxd rating does not appear.
 Turn on both "Letterboxd link" and "Letterboxd rating" in Settings, and make sure your manager allowed the connection to letterboxd.com. Some films have no rating yet. Letterboxd may also block automated requests at times, in which case the rating shows up on a later visit.
 
@@ -225,6 +234,7 @@ The whole script is one readable file, `pahe-cinema-ui.user.js`. It is not minif
 
 - A stylesheet applies to every rule with raised specificity and `!important`, so the theme's own dark-skin rules cannot win in either mood.
 - JavaScript steps add structure around the original elements. Download buttons, tabs and forms are moved, not recreated, so the site's own handlers keep working.
+- An early main-world guard filters common pop-up and click-hijack patterns without sending data to another service. Its allowlist covers the site itself plus TMDb, Letterboxd, IMDb and YouTube.
 - Each step runs inside its own error guard, so one failing part does not stop the others.
 - Settings live in a single `DEFAULTS` object. Adding a setting means adding a default, a row in the settings panel and, if needed, a CSS variable or attribute set in `apply()`.
 
@@ -234,6 +244,7 @@ Pull requests are welcome. Please keep the file readable, avoid adding remote sc
 
 ## Changelog
 
+- 1.3.0: added best-effort anti-popunder and click-hijack protection for untrusted pop-ups, synthetic redirects, suspicious global handlers, transparent overlays and sponsored redirect links.
 - 1.2.0: IMDb and Letterboxd logos on the buttons, Letterboxd rating, "Find on Pahe" for directors, creators and cast.
 - 1.1.0: official release with runtime display options, a Letterboxd link on film pages, exact TMDb matching by IMDb ID, scored fallback matching, a manual match picker, settings and Tampermonkey menu controls, per-user TMDb keys, live search with suggestions, cast and director details, TMDb posters, ratings and stills, improved download rows, list and search pages, series support, the cinema header, ledger descriptions and Other-menu grids.
 
